@@ -9,13 +9,16 @@ const int screen_width = 640;
 const int screen_height = 480;
 
 Position3 spPos = { -150, 0, 0 };
-Position3 spPos2 = { 150, 50, -50 };
+Position3 spPos2 = { 150, 50, -80 };
 
 Vector3 yellow = { 1, 1, 0.8f };
 Vector3 red = { 1, 0.8, 0.8 };
 
 Vector3 pNormal = { 0, 1, 0 };
 Vector3 eye		= { 0, 0, 300 };
+
+Sphere sp1 = { 100, spPos, yellow };
+Sphere sp2 = { 100, spPos2, red };
 	
 /// 一定範囲内の値を返す関数(レイトレで使用する成分用)
 float Clamp(const float& value, const float& minVal = 0.0f, const float& maxVal = 1.0f)
@@ -97,7 +100,7 @@ bool IsHitRayAndObject(const Position3& eye, const Vector3& ray, const Plane& pl
 	return (Dot(ray, plane.normal) > 0);
 }
 
-bool HitCheck(const Position3& eye, const Vector3& light, Vector3& ray,
+bool HitCheck(const Position3& eye, Vector3& light, Vector3& ray,
 	const Vector2& scrPos, const Sphere& sp, const Plane& plane, float& distance)
 {
 	if (IsHitRayAndObject(eye, ray, sp, distance))
@@ -110,10 +113,15 @@ bool HitCheck(const Position3& eye, const Vector3& light, Vector3& ray,
 
 		Vector3 albedo = sp.albedo;
 		float k = 1.0;		// 鏡面反射の定数
-		auto diffuse = 0.0f;
-		auto specular = 0.0f;
-		auto ambient = 1.0f;
+		auto diffuse   = 0.0f;
+		auto specular  = 0.0f;
+		auto ambient   = 1.0f;
+		Vector3 shadow = { 0,0,0 };
 
+		if (IsHitRayAndObject(hitPos, -light, sp1, distance))
+		{
+			shadow = Vector3(0.2f, 0.2f, 0.2f);
+		}
 		diffuse = Clamp(Dot(light, normal));
 
 		auto reflectVec = ReflectVector(light, normal);
@@ -135,7 +143,7 @@ bool HitCheck(const Position3& eye, const Vector3& light, Vector3& ray,
 		}
 		else
 		{
-			DrawPixel(scrPos.x, scrPos.y, CalculateColor(albedo, diffuse, specular, ambient));
+			DrawPixel(scrPos.x, scrPos.y, CalculateColor(albedo - shadow, diffuse, specular, ambient));
 		}
 		return true;
 	}
@@ -147,8 +155,8 @@ bool HitCheck(const Position3& eye, const Vector3& light, Vector3& ray,
 ///@param sphere 球オブジェクト(そのうち複数にする)
 void RayTracing(const Position3& eye, const Plane& plane)
 {
-	Sphere sp1 = { 100, spPos, yellow };
-	Sphere sp2 = { 100, spPos2, red };
+	sp1 = { 100, spPos, yellow };
+	sp2 = { 100, spPos2, red };
 
 	for (int y = 0; y < screen_height; ++y) {//スクリーン縦方向
 		for (int x = 0; x < screen_width; ++x) {//スクリーン横方向
@@ -168,11 +176,17 @@ void RayTracing(const Position3& eye, const Plane& plane)
 					auto color = PlaneColor(GetPlaneColor(hitPos));
 					if (IsHitRayAndObject(hitPos, -light, sp1, distance))
 					{
-						color = PlaneColor(GetPlaneColor(hitPos) - Vector3(0, 0.2f, 0.2f));
+						if (!IsHitRayAndObject(hitPos, -light, sp2, distance))
+						{
+							color = PlaneColor(GetPlaneColor(hitPos) - Vector3(0, 0.2f, 0.2f));
+						}
 					}
-					else if (IsHitRayAndObject(hitPos, -light, sp2, distance))
+					if (IsHitRayAndObject(hitPos, -light, sp2, distance))
 					{
-						color = PlaneColor(GetPlaneColor(hitPos) - Vector3(0, 0.2f, 0.2f));
+						if (!IsHitRayAndObject(hitPos, -light, sp1, distance))
+						{
+							color = PlaneColor(GetPlaneColor(hitPos) - Vector3(0, 0.2f, 0.2f));
+						}	
 					}
 					DrawPixel(x, y, color);
 				}
