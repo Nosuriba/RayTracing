@@ -1,5 +1,6 @@
 #include<dxlib.h>
 #include<math.h>
+#include<vector>
 #include<limits>
 #include<assert.h>
 #include"Geometry.h"
@@ -7,10 +8,15 @@
 const int screen_width = 640;
 const int screen_height = 480;
 
-Position3 spPos = { 0, 0, 0 };
+Position3 spPos = { -150, 0, 0 };
+Position3 spPos2 = { 150, 50, -50 };
+
+Vector3 yellow = { 1, 1, 0.8f };
+Vector3 red = { 1, 0.8, 0.8 };
+
 Vector3 pNormal = { 0, 1, 0 };
 Vector3 eye		= { 0, 0, 300 };
-
+	
 /// 一定範囲内の値を返す関数(レイトレで使用する成分用)
 float Clamp(const float& value, const float& minVal = 0.0f, const float& maxVal = 1.0f)
 {
@@ -91,10 +97,59 @@ bool IsHitRayAndObject(const Position3& eye, const Vector3& ray, const Plane& pl
 	return (Dot(ray, plane.normal) > 0);
 }
 
+bool HitCheck(const Position3& eye, const Vector3& light, Vector3& ray,
+	const Vector2& scrPos, const Sphere& sp, const Plane& plane, float& distance)
+{
+	if (IsHitRayAndObject(eye, ray, sp, distance))
+	{
+		assert(distance >= 0.0f);
+
+		Position3 hitPos = eye + ray * distance;
+		auto normal = hitPos - sp.pos;
+		normal.Normalize();
+
+		Vector3 albedo = sp.albedo;
+		float k = 1.0;		// 鏡面反射の定数
+		auto diffuse = 0.0f;
+		auto specular = 0.0f;
+		auto ambient = 1.0f;
+
+		diffuse = Clamp(Dot(light, normal));
+
+		auto reflectVec = ReflectVector(light, normal);
+		reflectVec.Normalize();
+		if (diffuse > 0.0f)
+		{
+			specular += k * pow(Dot(reflectVec, -ray), 20);
+		}
+		auto reflectRay = ReflectVector(ray, normal);
+		/*reflectRay.Normalize();*/
+
+		/// 交点座標からの反射ベクトルが床と当たったかの判定を行っている
+		if (IsHitRayAndObject(hitPos, reflectRay, plane, distance))
+		{
+			/// レイが当たった床の位置の色を取得して、球体に色を付けている
+			auto pos = hitPos + reflectRay * distance;
+			//auto pos = hitPos - reflectRay * distance;
+			DrawPixel(scrPos.x, scrPos.y, PlaneColor(GetPlaneColor(pos) * (diffuse + 0.2f)));
+		}
+		else
+		{
+			DrawPixel(scrPos.x, scrPos.y, CalculateColor(albedo, diffuse, specular, ambient));
+		}
+		return true;
+	}
+	return false;
+}
+
 ///レイトレーシング
 ///@param eye 視点座標
 ///@param sphere 球オブジェクト(そのうち複数にする)
-void RayTracing(const Position3& eye,const Sphere& sphere, const Plane& plane) {
+void RayTracing(const Position3& eye, const Plane& plane)
+{
+	Sphere sp1 = { 100, spPos, yellow };
+	Sphere sp2 = { 100, spPos2, red };
+
 	for (int y = 0; y < screen_height; ++y) {//スクリーン縦方向
 		for (int x = 0; x < screen_width; ++x) {//スクリーン横方向
 			Position3 screenPos( x - screen_width / 2, y - screen_height / 2, 0);
@@ -104,52 +159,18 @@ void RayTracing(const Position3& eye,const Sphere& sphere, const Plane& plane) {
 			ray.Normalize();
 			float distance = 0.0f;
 			
-			if (IsHitRayAndObject(eye, ray, sphere, distance))
-			{
-				assert(distance >= 0.0f);
-
-				Position3 hitPos = eye + ray * distance;
-				auto normal	 	 = hitPos - sphere.pos;
-				normal.Normalize();
-
-				Vector3 albedo = { 1, 1, 0.8f };
-				float k		   = 1.0;		// 鏡面反射の定数
-				auto diffuse   = 0.0f;
-				auto specular  = 0.0f;
-				auto ambient   = 1.0f;
-				
-				diffuse = Clamp(Dot(light, normal));
-
-				auto reflectVec = ReflectVector(light, normal);
-				reflectVec.Normalize();
-				if (diffuse > 0.0f)
-				{
-					specular += k * pow(Dot(reflectVec, -ray), 20);
-				}
-				auto reflectRay = ReflectVector(ray, normal);
-				/*reflectRay.Normalize();*/
-
-				/// 交点座標からの反射ベクトルが床と当たったかの判定を行っている
-				if (IsHitRayAndObject(hitPos, reflectRay, plane, distance))
-				{
-					/// レイが当たった床の位置の色を取得して、球体に色を付けている
-					auto pos = hitPos + reflectRay * distance;
-					//auto pos = hitPos - reflectRay * distance;
-					DrawPixel(x, y, PlaneColor(GetPlaneColor(pos) * (diffuse + 0.2f)));
-				}
-				else
-				{
-					DrawPixel(x, y, CalculateColor(albedo, diffuse, specular, ambient));
-				}
-			}
-			else
+			if (!HitCheck(eye, light, ray, Vector2(x, y), sp1, plane, distance) &&
+				!HitCheck(eye, light, ray, Vector2(x, y), sp2, plane, distance))
 			{
 				if (IsHitRayAndObject(eye, ray, plane, distance))
 				{
 					auto hitPos = eye + ray * distance;
 					auto color = PlaneColor(GetPlaneColor(hitPos));
-
-					if (IsHitRayAndObject(hitPos, -light, sphere, distance))
+					if (IsHitRayAndObject(hitPos, -light, sp1, distance))
+					{
+						color = PlaneColor(GetPlaneColor(hitPos) - Vector3(0, 0.2f, 0.2f));
+					}
+					else if (IsHitRayAndObject(hitPos, -light, sp2, distance))
 					{
 						color = PlaneColor(GetPlaneColor(hitPos) - Vector3(0, 0.2f, 0.2f));
 					}
@@ -204,27 +225,8 @@ int main() {
 		{
 			spPos.z--;
 		}
-
-		/// 床の移動
-		if (CheckHitKey(KEY_INPUT_D))
-		{
-			pNormal.x = (pNormal.x < 1.0 ? pNormal.x + 0.1f : pNormal.x);
-		}
-		else if (CheckHitKey(KEY_INPUT_A))
-		{
-			pNormal.x = (pNormal.x > -1.0 ? pNormal.x - 0.1f : pNormal.x);
-		}
-		if (CheckHitKey(KEY_INPUT_S))
-		{
-			pNormal.z = (pNormal.z < 1.0 ? pNormal.z + 0.1f : pNormal.z);
-		}
-		else if (CheckHitKey(KEY_INPUT_W))
-		{
-			pNormal.z = (pNormal.z > -1.0 ? pNormal.z - 0.1f : pNormal.z);
-		}
-
 		/// 床の位置を定数から変えておく
-		RayTracing(eye, Sphere(100, spPos), Plane(pNormal, -100));
+		RayTracing(eye, Plane(pNormal, -300));
 		DxLib_End;
 	}
 }

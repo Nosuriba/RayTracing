@@ -101,8 +101,9 @@ struct Circle {
 struct Sphere {
 	float radius;//îºåa
 	Position3 pos; //íÜêSç¿ïW
-	Sphere() :radius(0), pos(0, 0,0) {}
-	Sphere(float r, Position3& p) :radius(r), pos(p) {}
+	Vector3 albedo;
+	Sphere() :radius(0), pos(0, 0,0), albedo(0,0,0) {}
+	Sphere(float r, Position3& p, Vector3 color) :radius(r), pos(p), albedo(color) {}
 };
 
 // ïΩñ 
